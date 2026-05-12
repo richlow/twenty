@@ -1,0 +1,98 @@
+# Twenty CRM — Render Blueprint
+# Mirrors the topology described in CLAUDE.md / packages/twenty-docker/docker-compose.yml:
+# Postgres (managed), Redis (Key Value / BullMQ), NestJS GraphQL API + static frontend (web),
+# and the queue worker process.
+#
+# Deploy from this repo root in the Render Dashboard (Blueprints → New Blueprint).
+#
+# First deploy checklist:
+# 1. When prompted by the blueprint, set SERVER_URL to your public HTTPS URL, e.g.
+#    https://twenty-xxxx.onrender.com — use this same value everywhere you map auth/callback URLs.
+# 2. Pin docker.io/twentycrm/twenty below to an immutable tag instead of latest for repeatable deploys.
+# 3. Local file storage vs worker: Render cannot attach one shared persistent disk across two services.
+#    For production with STORAGE_TYPE=local uploads, prefer STORAGE_TYPE=S3 (+ STORAGE_S3_*) instead.
+#
+# Building this monorepo’s Dockerfile directly on Render is not wired here — the Dockerfile’s final
+# stage is twenty-app-dev (all‑in‑one dev image). For source builds, target the `twenty` stage or
+# build/push images in CI (see packages/twenty-docker/twenty/Dockerfile).
+
+envVarGroups:
+  - name: twenty-shared
+    envVars:
+      # One shared canonical URL used by Twenty for links, OAuth, and cookies (HTTPS in production).
+      - key: SERVER_URL
+        sync: false
+      - key: APP_SECRET
+        generateValue: true
+
+databases:
+  - name: twenty-postgres
+    databaseName: default
+    user: twenty
+    plan: basic-256mb
+
+services:
+  - type: keyvalue
+    name: twenty-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: allow Render private network endpoints
+
+  - type: web
+    name: twenty
+    runtime: image
+    plan: starter
+    region: oregon
+    healthCheckPath: /healthz
+    image:
+      url: docker.io/twentycrm/twenty:latest
+    dockerCommand: "/bin/sh -c 'export NODE_PORT=$PORT && exec /app/entrypoint.sh node dist/main'"
+    disk:
+      name: twenty-storage
+      mountPath: /app/packages/twenty-server/.local-storage
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STORAGE_TYPE
+        value: local
+      - key: PG_DATABASE_URL
+        fromDatabase:
+          name: twenty-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: twenty-redis
+          type: keyvalue
+          property: connectionString
+      - fromGroup: twenty-shared
+
+  - type: worker
+    name: twenty-worker
+    runtime: image
+    plan: starter
+    region: oregon
+    image:
+      url: docker.io/twentycrm/twenty:latest
+    dockerCommand: "/bin/sh -c 'exec /app/entrypoint.sh yarn worker:prod'"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STORAGE_TYPE
+        value: local
+      - key: DISABLE_DB_MIGRATIONS
+        value: 'true'
+      - key: DISABLE_CRON_JOBS_REGISTRATION
+        value: 'true'
+      - key: PG_DATABASE_URL
+        fromDatabase:
+          name: twenty-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: twenty-redis
+          type: keyvalue
+          property: connectionString
+      - fromGroup: twenty-shared
