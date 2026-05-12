@@ -11,6 +11,8 @@
 # 2. Pin docker.io/twentycrm/twenty below to an immutable tag instead of latest for repeatable deploys.
 # 3. Local file storage vs worker: Render cannot attach one shared persistent disk across two services.
 #    For production with STORAGE_TYPE=local uploads, prefer STORAGE_TYPE=S3 (+ STORAGE_S3_*) instead.
+# 4. Memory: Starter (~512MB) is tight — Twenty boot + DB migrations often needs more heap. NODE_OPTIONS
+#    below raises the V8 limit; if deploys still die with heap OOM, bump web/worker plans (e.g. standard).
 #
 # Building this monorepo’s Dockerfile directly on Render is not wired here — the Dockerfile’s final
 # stage is twenty-app-dev (all‑in‑one dev image). For source builds, target the `twenty` stage or
@@ -24,6 +26,9 @@ envVarGroups:
         sync: false
       - key: APP_SECRET
         generateValue: true
+      # Starter instances ~512MB RAM; default Node heap (~256MB) hits OOM during Nest bootstrap.
+      - key: NODE_OPTIONS
+        value: '--max-old-space-size=448'
 
 databases:
   - name: twenty-postgres
