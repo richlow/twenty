@@ -48,8 +48,9 @@ services:
     healthCheckPath: /healthz
     image:
       url: docker.io/twentycrm/twenty:latest
-    # Double quotes inside -c — nested single quotes break on Render (worker crash loop).
-    dockerCommand: '/bin/sh -c "export NODE_PORT=$PORT && exec /app/entrypoint.sh node dist/main"'
+    # Twenty listens on NODE_PORT (see twenty-server config); Render expects PORT on web services.
+    # Avoid `/bin/sh -c ...` — Render often splits args wrong (deploy exits 127: ": not found").
+    dockerCommand: node dist/main
     disk:
       name: twenty-storage
       mountPath: /app/packages/twenty-server/.local-storage
@@ -57,6 +58,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_PORT
+        value: '10000'
       - key: STORAGE_TYPE
         value: local
       - key: PG_DATABASE_URL
@@ -77,7 +80,8 @@ services:
     region: oregon
     image:
       url: docker.io/twentycrm/twenty:latest
-    dockerCommand: '/bin/sh -c "exec /app/entrypoint.sh yarn worker:prod"'
+    # Same reasoning as web — plain CMD args for ENTRYPOINT (compose: command: yarn worker:prod).
+    dockerCommand: 'yarn worker:prod'
     envVars:
       - key: NODE_ENV
         value: production
