@@ -54,8 +54,8 @@ services:
     image:
       url: docker.io/twentycrm/twenty:latest
     # Twenty listens on NODE_PORT (see twenty-server config); Render expects PORT on web services.
-    # Avoid `/bin/sh -c ...` — Render often splits args wrong (deploy exits 127: ": not found").
-    dockerCommand: node dist/main
+    # The Docker image includes an ENTRYPOINT that runs migrations before starting the server.
+    # We omit dockerCommand here to let the image's default CMD and ENTRYPOINT execute.
     disk:
       name: twenty-storage
       mountPath: /app/packages/twenty-server/.local-storage
