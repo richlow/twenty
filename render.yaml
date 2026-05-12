@@ -34,7 +34,7 @@ databases:
 services:
   - type: keyvalue
     name: twenty-redis
-    plan: free
+    plan: starter
     maxmemoryPolicy: noeviction
     ipAllowList:
       - source: 0.0.0.0/0
